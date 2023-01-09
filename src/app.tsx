@@ -1,5 +1,5 @@
-import { useEffect } from "preact/hooks";
-import { useSignal, useSignalEffect } from "@preact/signals";
+import { useEffect, useMemo } from "preact/hooks";
+import { Signal, useSignal, useSignalEffect } from "@preact/signals";
 import filledHeartURL from "./assets/heart-full.png";
 import emptyHeartURL from "./assets/heart-empty.png";
 import forestCreatureURL from "./assets/forest-creature.png";
@@ -25,12 +25,28 @@ function clamp(x: number, min: number, max: number): number {
   return x;
 }
 
+function useSignalLocalStorage<T>(key: string, initialValue: T): Signal<T> {
+  const value = useMemo<T>(() => {
+    const item = localStorage.getItem(key);
+    if (item === null) {
+      return initialValue;
+    }
+    return JSON.parse(item);
+  }, []);
+
+  const signal = useSignal(value);
+
+  useSignalEffect(() => {
+    localStorage.setItem(key, JSON.stringify(signal.value));
+  });
+
+  return signal;
+}
+
 export function App() {
-  const palette = useSignal<AppArea>("desert");
-  const happiness = useSignal(-1);
+  const palette = useSignalLocalStorage<AppArea>("zone", "desert");
+  const happiness = useSignalLocalStorage("happiness", 5);
   const maxHappiness = 10;
-  const filledHearts = happiness.value;
-  const emptyHearts = maxHappiness - happiness.value;
   const year = new Date().getFullYear();
 
   function adjustHappiness(delta: number): void {
@@ -40,24 +56,11 @@ export function App() {
   // Update page theme
   useSignalEffect(() => {
     document.documentElement.dataset.palette = palette.value;
-  });
-
-  // Save happiness to localStorage
-  useSignalEffect(() => {
-    if (happiness.value < 0) {
-      return;
+    const link = document.querySelector(`link[rel="icon"][sizes="16x16"]`);
+    if (link instanceof HTMLLinkElement) {
+      link.href = creatures[palette.value];
     }
-    localStorage.setItem("happiness", JSON.stringify(happiness.value));
   });
-
-  // Load happiness from localStorage
-  useEffect(() => {
-    happiness.value = clamp(
-      JSON.parse(localStorage.getItem("happiness") || "5"),
-      0,
-      maxHappiness
-    );
-  }, []);
 
   // Make happiness go down over time
   useEffect(() => {
@@ -95,7 +98,7 @@ export function App() {
       <div class="bit-card layout-flex-col-gap">
         <h2>Happiness</h2>
         <div class="layout-flex-wrap">
-          {Array.from({ length: filledHearts }, () => (
+          {Array.from({ length: happiness.value }, () => (
             <img
               class="pixelated"
               width={8 * 8}
@@ -103,7 +106,7 @@ export function App() {
               src={filledHeartURL}
             />
           ))}
-          {Array.from({ length: emptyHearts }, () => (
+          {Array.from({ length: maxHappiness - happiness.value }, () => (
             <img
               class="pixelated"
               width={8 * 8}
